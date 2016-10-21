@@ -1,11 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""
-    GF.365 integration server
-    ~~~~~~~
-"""
+# Meta
+__version__ = '1.0'
+__version_info__ = (1, 0)
+__author__ = 'Sangkyung Lee <sangkyung.lee@gconhub.co.kr>'
 
-__author__ = 'sangkyung.lee@gconhub.co.kr'
+"""
+    GF365 integration game server
+"""
 
 import signal
 import time
@@ -13,7 +15,7 @@ import time
 import tornado.httpserver
 import tornado.ioloop
 import tornado.web
-from handler import CHandler, GHandler
+from handler import GFLoginHandler, ScoreHandler, VersionHandler, MissionInfoHandler, MissionEndHandler
 from tornado.options import options, define, parse_command_line
 
 define('port', default=8890, help='default port number', type=int)
@@ -28,18 +30,23 @@ def main():
 
     # create tornado request handler
     application = tornado.web.Application([
-        (r"/capi", CHandler),
-        (r"/gapi", GHandler)
+        (r"/capi/login/v1/([0-9]+)", GFLoginHandler),
+        (r"/gapi/score/v2/(.*)", ScoreHandler),
+        (r"/gapi/mission_info/v1/(.*)", MissionInfoHandler),
+        (r"/capi/mission_end/v1/(.*)", MissionEndHandler),
+        (r"/version", VersionHandler),
+        (r'/(favicon.ico)', tornado.web.StaticFileHandler, {"path": ""}),
     ])
 
     # notice command signal(server shutdown)
     signal.signal(signal.SIGTERM, sig_handler)
     signal.signal(signal.SIGINT, sig_handler)
 
-    # simple multi-process(non-blocking)
+    # simple non-blocking (single process)
     server = tornado.httpserver.HTTPServer(application)
-    server.bind(options.port)
-    server.start(0)
+    server.listen(options.port)
+    # server.bind(options.port)
+    # server.start(0)   # for sub-process
     tornado.ioloop.IOLoop.current().start()
 
     # exit
