@@ -35,8 +35,9 @@ def main():
     application = tornado.web.Application([
         (r"/capi/login/v1/([0-9]+)", GFLoginHandler),
         (r"/gapi/score/v2/(.*)", ScoreHandler),
+        (r"/gapi/payment/v2/(.*)", ScoreHandler),
         (r"/gapi/mission_info/v1/(.*)", MissionInfoHandler),
-        (r"/capi/mission_end/v1/(.*)", MissionEndHandler),
+        (r"/capi/mission_end/v1", MissionEndHandler),
         (r"/version", VersionHandler),
         (r'/(favicon.ico)', tornado.web.StaticFileHandler, {"path": ""}),
     ])

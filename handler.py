@@ -225,7 +225,7 @@ class ScoreHandler(BaseHandler):
 
         log.debug("Members: %s" % self.userinfo)
 
-        if self.userinfo["evtToken"] != self.evtToken:
+        if self.userinfo is None:
             self.write_message(code="999", message="need to login")
 
         if self.userinfo["evtAuthToken"] is None:
@@ -382,11 +382,7 @@ class MissionEndHandler(BaseHandler):
         self.write_message(code="899", message="not support get")
 
     @asynchronous
-    def post(self, evtToken):
-
-        url = "%s/mission/end" % _C_SERVER
-        self.evtToken = str(evtToken)
-        self.userinfo = SelectMember(self.evtToken)
+    def post(self):
 
         requested_body = None
         try:
@@ -396,11 +392,18 @@ class MissionEndHandler(BaseHandler):
             log.debug("request.body: %s" % self.request.body)
             self.write_message(code="999", message="json syntax error")
 
-        if self.userinfo is None:
-            self.write_message(code="999", message="need to login (none info)")
+        if "evtToken" not in requested_body:
+            self.write_message(code="998", message="missing evtToken attribute")
 
         if "result" not in requested_body:
-            self.write_message(code="998", message="missing ScoreId attribute")
+            self.write_message(code="998", message="missing result attribute")
+
+        url = "%s/mission/end" % _C_SERVER
+        self.evtToken = str(requested_body["evtToken"])
+        self.userinfo = SelectMember(self.evtToken)
+
+        if self.userinfo is None:
+            self.write_message(code="999", message="need to login (none info)")
 
         if self.userinfo["evtAuthToken"] is None:
             self.write_message(code="999", message="need to login")
