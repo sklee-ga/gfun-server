@@ -18,6 +18,8 @@ import tornado.web
 from handler import GFLoginHandler, ScoreHandler, VersionHandler, MissionInfoHandler, MissionEndHandler
 from tornado.options import options, define, parse_command_line
 
+import library.sqlitedb
+
 define('port', default=8890, help='default port number', type=int)
 define('conf', default='./config/local.conf', help='config file', type=str)
 MAX_WAIT_SECONDS_BEFORE_SHUTDOWN = 3
@@ -27,6 +29,7 @@ def main():
     from library.logger import log, initialize
 
     initialize()
+    library.sqlitedb.initialize()
 
     # create tornado request handler
     application = tornado.web.Application([

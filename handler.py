@@ -7,8 +7,112 @@ from tornado.web import asynchronous, RequestHandler
 from library.logger import log
 from datetime import datetime
 
+from library.sqlitedb import conn, dict_factory
 
-Members = dict()
+ScoreData = {
+    "K100": 100,
+    "K300": 300,
+    "K500": 500,
+    "K700": 700,
+    "K1000": 1000,
+}
+
+_SERVER_INFO = {
+    "works": {
+        "_C_SERVER": "https://works-c.gamefestival365.co.kr:9000",
+        "_G_SERVER": "https://works-g.gamefestival365.co.kr:9100"
+    },
+    "dev": {
+        "_C_SERVER": "http://172.20.101.8:9000",
+        "_G_SERVER": "http://172.20.101.8:9100"
+    },
+    "qa": {
+        "_C_SERVER": "http://172.20.102.3:9000",
+        "_G_SERVER": "http://172.20.102.3:9100"
+    },
+    "stage": {
+        "_C_SERVER": "http://211.253.14.199:9000",
+        "_G_SERVER": "http://211.253.25.51:9100"
+    },
+}
+
+_ENV = "qa"
+_C_SERVER = _SERVER_INFO[_ENV]["_C_SERVER"]
+_G_SERVER = _SERVER_INFO[_ENV]["_G_SERVER"]
+
+
+def UpdateMember(evtToken=str, evtAuthToken=None,
+                 missionToken=None, gUserKey="", gScore=0):
+
+    c = conn.cursor()
+
+    # if user exists
+    c.execute("SELECT count(*) AS total FROM users WHERE evtToken=?", (evtToken,))
+    user_count = c.fetchone()
+
+    log.debug("users count: %s" % user_count)
+
+    if user_count["total"] == 0:
+
+        data = {
+            "evtToken": evtToken,
+            "evtAuthToken": evtAuthToken,
+            "missionToken": missionToken,
+            "gUserKey": gUserKey,
+            "gSumScore": gScore
+        }
+
+        # Insert new user
+        sql = "INSERT INTO users " \
+              " (evtToken, evtAuthToken, missionToken, gUserKey, gSumScore) " \
+              " VALUES " \
+              "('%(evtToken)s','%(evtAuthToken)s','%(missionToken)s','%(gUserKey)s', %(gSumScore)d )"
+
+        log.debug(sql % data)
+        c.execute(sql % data)
+
+        conn.commit()
+
+    if evtAuthToken != None:
+
+        sql = " Update users set evtAuthToken = ? where evtToken = ?"
+        c.execute(sql, (evtAuthToken, evtToken,))
+        conn.commit()
+
+    if missionToken != None:
+        sql = " Update users set missionToken = ? where evtToken = ?"
+        c.execute(sql, (missionToken, evtToken,))
+        conn.commit()
+
+    if gUserKey != None:
+        sql = "Update users set gUserKey = ? where evtToken = ?"
+        c.execute(sql, (gUserKey, evtToken,))
+        conn.commit()
+
+    if gScore > 0:
+        sql = " Update users set gSumScore = gSumScore + ? where evtToken = ?"
+        c.execute(sql, (gScore, evtToken,))
+        conn.commit()
+
+
+def SelectMember(evtToken=str):
+
+    conn.row_factory = dict_factory
+    c = conn.cursor()
+
+    # if user exists
+    c.execute('SELECT * FROM users WHERE evtToken=?', (evtToken,))
+    ret = c.fetchone()
+
+    # result = {
+    #     "evtToken": str(ret["evtToken"]),
+    #     "evtAuthToken": str(ret["evtAuthToken"]),
+    #     "missionToken": str(ret["missionToken"]),
+    #     "gUserKey": str(ret["gUserKey"]),
+    #     "gSumScore": int(ret["gSumScore"]),
+    # }
+
+    return ret
 
 
 class BaseHandler(RequestHandler):
@@ -16,6 +120,7 @@ class BaseHandler(RequestHandler):
     def __init__(self, application, request, **kwargs):
         super(BaseHandler, self).__init__(application, request, **kwargs)
         self.evtToken = None
+        self.userinfo = dict
 
     def data_received(self, chunk):
         pass
@@ -32,40 +137,15 @@ class BaseHandler(RequestHandler):
 
         output = json.dumps(response_body)
         self.write(output)
+        self.finish()
+        self.clear()
+        return
 
     def write_message_by_data(self, data=dict):
-        response_body = {
-            "retCode": data['retCode'],
-            "message": data['message'],
-            "items": data['items']
-        }
 
-        output = json.dumps(response_body)
-        self.write(output)
-
-    def update_member(self, evtToken=str, evtAuthToken=None,
-                      missionToken=None, gUserKey="", gScore=0):
-
-        if evtToken not in Members:
-            Members[evtToken] = {
-                "evtToken": evtToken,
-                "evtAuthToken": evtAuthToken,
-                "missionToken": missionToken,
-                "gUserKey": gUserKey,
-                "gSumScore": gScore
-            }
-
-        if evtAuthToken != None:
-            Members[evtToken]["evtAuthToken"] = evtAuthToken
-
-        if missionToken != None:
-            Members[evtToken]["missionToken"] = missionToken
-
-        if gUserKey != None:
-            Members[evtToken]["gUserKey"] = gUserKey
-
-        if gScore > 0:
-            Members[evtToken]["gSumScore"] = Members[evtToken]["gSumScore"] + gScore
+        self.write_message(code=data['retCode'],
+                           message=data['message'],
+                           item=data['items'])
 
 
 class GFLoginHandler(BaseHandler):
@@ -77,9 +157,9 @@ class GFLoginHandler(BaseHandler):
 
         self.evtToken = str(etoken)
 
-        self.update_member(evtToken=self.evtToken)
+        UpdateMember(evtToken=self.evtToken)
 
-        url = "https://works-c.gamefestival365.co.kr:9000/login/game/%s" % str(self.evtToken)
+        url = "%s/login/game/v2/%s" % (_C_SERVER, str(self.evtToken))
         body = ""
 
         http_client = AsyncHTTPClient()
@@ -101,7 +181,7 @@ class GFLoginHandler(BaseHandler):
         if response.code == 200:
             response_body = json.loads(response.body)
 
-            data["retCode"] = response_body["code"]
+            data["retCode"] = response_body["retCode"]
             data["message"] = "OK"
             data["items"] = {
                 "evtAuthToken": response_body["evtAuthToken"],
@@ -109,12 +189,11 @@ class GFLoginHandler(BaseHandler):
             }
 
             # if got success
-            if response_body["code"] == "000":
-                self.update_member(evtToken=self.evtToken,
-                                   evtAuthToken=response_body["evtAuthToken"])
+            if response_body["retCode"] == "000":
+                UpdateMember(evtToken=self.evtToken,
+                             evtAuthToken=response_body["evtAuthToken"])
 
         self.write_message_by_data(data)
-        self.finish()
 
 
 class ScoreHandler(BaseHandler):
@@ -131,41 +210,53 @@ class ScoreHandler(BaseHandler):
     def post(self, serverIndex):
 
         log.debug("Request GF365 score API")
-        url = "https://works-g.gamefestival365.co.kr:9100/score/v2/%d" % int(serverIndex)
+        url = "%s/score/v2/%d" % (_G_SERVER, int(serverIndex))
 
-        requested_body = json.loads(self.request.body)
-        log.debug("req: %s" % requested_body)
-        self.evtToken = requested_body["evtToken"]
+        requested_body = None
+        try:
+            requested_body = json.loads(self.request.body)
+            log.debug("requested_body: %s" % requested_body)
+        except ValueError as e:
+            log.debug("request.body: %s" % self.request.body)
+            self.write_message(code="999", message="json syntax error")
 
-        if self.evtToken not in Members:
+        self.evtToken = str(requested_body["evtToken"])
+        self.userinfo = SelectMember(self.evtToken)
+
+        log.debug("Members: %s" % self.userinfo)
+
+        if self.userinfo["evtToken"] != self.evtToken:
             self.write_message(code="999", message="need to login")
-            self.finish()
 
-        if Members[self.evtToken]["evtAuthToken"] is None:
+        if self.userinfo["evtAuthToken"] is None:
             self.write_message(code="999", message="need to login")
-            self.finish()
 
-        if "Score" not in requested_body:
-            self.write_message(code="998", message="missing Score attribute")
-            self.finish()
+        if "ScoreId" not in requested_body:
+            self.write_message(code="998", message="missing ScoreId attribute")
+
+        ScoreId = str(requested_body["ScoreId"])
+
+        if ScoreId not in ScoreData:
+            self.write_message(code="998", message="unknown ScoreId: %s" % ScoreId)
+
+        deltaScore = int(ScoreData[ScoreId])
 
         body = {
             "kind": "score#write",
             "gameId": 90001,
             "eventId": 91001,
             "evtToken": self.evtToken,
-            "evtAuthToken": Members[self.evtToken]["evtAuthToken"],
+            "evtAuthToken": self.userinfo["evtAuthToken"],
             "gEvtTime": datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'),
-            "gSumScore": Members[self.evtToken]["gSumScore"] + int(requested_body["Score"]),
-            "gDeltaScore": int(requested_body["Score"]),
-            "gScoreType": "AAA100",
-            "gUserKey": Members[self.evtToken]["gUserKey"]
+            "gSumScore": self.userinfo["gSumScore"] + deltaScore,
+            "gDeltaScore": deltaScore,
+            "gScoreType": ScoreId,
+            "gUserKey": self.userinfo["gUserKey"]
         }
 
         body_value = json.dumps(body)
-        self.score = int(requested_body["Score"])
-
         log.debug("body: %s" % body_value)
+        self.score = deltaScore
 
         http_client = AsyncHTTPClient()
         http_request = HTTPRequest(url, method="POST", body=body_value, validate_cert=False)
@@ -188,13 +279,12 @@ class ScoreHandler(BaseHandler):
 
             # if got success update member
             if response_body["retCode"] == "000":
-                self.update_member(evtToken=self.evtToken,
-                                   gScore=self.score)
+                UpdateMember(evtToken=self.evtToken, gScore=self.score)
 
             item = {
                 "evtToken": self.evtToken,
-                "evtAuthToken": Members[self.evtToken]["evtAuthToken"],
-                "gSumScore": Members[self.evtToken]["gSumScore"]
+                "evtAuthToken": self.userinfo["evtAuthToken"],
+                "gSumScore": self.userinfo["gSumScore"]
             }
 
             self.write_message(code=response_body["retCode"],
@@ -204,8 +294,6 @@ class ScoreHandler(BaseHandler):
             self.write_message(code="999",
                                message="http error: %s" % response.code)
 
-        self.finish()
-
 
 class MissionInfoHandler(BaseHandler):
     def data_received(self, chunk):
@@ -214,16 +302,30 @@ class MissionInfoHandler(BaseHandler):
     @asynchronous
     def post(self, evtToken):
 
-        url = "https://works-c.gamefestival365.co.kr:9000/login/game/%d" % int(evtToken)
+        self.evtToken = str(evtToken)
+        self.userinfo = SelectMember(self.evtToken)
+
+        log.debug("Members: %s" % self.userinfo)
+
+        if self.userinfo is None:
+            self.write_message(code="999", message="need to login (none info)")
+
+        if self.userinfo["evtAuthToken"] is None:
+            self.write_message(code="998", message="need to login (none authtoken)")
+
+        url = "%s/mission/getinfo/v1/100" % _G_SERVER
         body = {
             "kind": "mission#getinfo",
-            "evtToken": "33334343",
-            "evtAuthToken": "94C323423423B5F4",
+            "evtToken": self.userinfo["evtToken"],
+            "evtAuthToken": self.userinfo["evtAuthToken"],
             "gUserKey": "userkey"
         }
 
+        log.debug("request url: %s" % url)
+        log.debug("request body: %s" % body)
+
         http_client = AsyncHTTPClient()
-        http_request = HTTPRequest(url, method="POST", body=body, validate_cert=False)
+        http_request = HTTPRequest(url, method="POST", body=json.dumps(body), validate_cert=False)
 
         http_client.fetch(http_request, callback=self.on_fetch)
         # http_client.fetch(api_url, self.api_process, validate_cert=False)
@@ -239,17 +341,35 @@ class MissionInfoHandler(BaseHandler):
         }
 
         if response.code == 200:
-            response_body = json.loads(response.body)
 
-            data["retCode"] = response_body["code"]
-            data["message"] = "OK"
-            data["items"] = {
-                "evtAuthToken": response_body["evtAuthToken"],
-                "evtEndTime": response_body["evtEndTime"]
-            }
+            if response.body == "":
+                self.write_message(code="999", message="unknown api error. (response null from api)")
+
+            response_body_buff = json.loads(response.body)
+            response_body = response_body_buff[0]
+
+            if response_body["retCode"] != "000":
+                data["retCode"] = response_body["retCode"]
+                data["message"] = response_body["message"]
+                data["items"] = response_body["item"]
+
+            else:
+                data["retCode"] = response_body["retCode"]
+                data["message"] = "OK"
+                data["items"] = {
+                    "evtAuthToken": response_body["evtAuthToken"],
+                    "evtEndTime": response_body["evtEndTime"],
+                    "missiontoken": str(response_body["item"]["missiontoken"]),
+                    "missiondetailindex": int(response_body["item"]["missiondetailindex"]),
+                    "missionlimittime": str(response_body["item"]["missionlimittime"]),
+                    "missionScore": int(response_body["item"]["missionScore"]),
+                    "lefttime": int(response_body["item"]["lefttime"]),
+                }
+
+                UpdateMember(evtToken=self.evtToken,
+                             missionToken=str(response_body["item"]["missiontoken"]))
 
         self.write_message_by_data(data)
-        self.finish()
 
 
 class MissionEndHandler(BaseHandler):
@@ -258,16 +378,47 @@ class MissionEndHandler(BaseHandler):
         pass
 
     @asynchronous
+    def get(self, *args, **kwargs):
+        self.write_message(code="899", message="not support get")
+
+    @asynchronous
     def post(self, evtToken):
 
-        url = "https://works-c.gamefestival365.co.kr:9000/login/game/%d" % int(evtToken)
-        #// 미션 토큰 : 개발사 서버가 GAPI의 mission/getinfo 로 얻었던 미션토큰을 완료시에 보내줘야 한다
+        url = "%s/mission/end" % _C_SERVER
+        self.evtToken = str(evtToken)
+        self.userinfo = SelectMember(self.evtToken)
+
+        requested_body = None
+        try:
+            requested_body = json.loads(self.request.body)
+            log.debug("requested_body: %s" % requested_body)
+        except ValueError as e:
+            log.debug("request.body: %s" % self.request.body)
+            self.write_message(code="999", message="json syntax error")
+
+        if self.userinfo is None:
+            self.write_message(code="999", message="need to login (none info)")
+
+        if "result" not in requested_body:
+            self.write_message(code="998", message="missing ScoreId attribute")
+
+        if self.userinfo["evtAuthToken"] is None:
+            self.write_message(code="999", message="need to login")
+
+        if self.userinfo["missionToken"] is None:
+            self.write_message(code="999", message="none missionToken")
+
+        mission_result = int(requested_body["result"])
+
         body = {
-            "missiontoken": "234234234"
+            "result": mission_result,
+            "evtToken": self.userinfo["evtToken"],
+            "evtAuthToken": self.userinfo["evtAuthToken"],
+            "missionToken": self.userinfo["missionToken"],
         }
 
         http_client = AsyncHTTPClient()
-        http_request = HTTPRequest(url, method="POST", body=body, validate_cert=False)
+        http_request = HTTPRequest(url, method="POST", body=json.dumps(body), validate_cert=False)
 
         http_client.fetch(http_request, callback=self.on_fetch)
         # http_client.fetch(api_url, self.api_process, validate_cert=False)
@@ -283,17 +434,28 @@ class MissionEndHandler(BaseHandler):
         }
 
         if response.code == 200:
+
+            if response.body == "":
+                self.write_message(code="999", message="unknown api error. (response null from api)")
+
             response_body = json.loads(response.body)
 
-            data["retCode"] = response_body["code"]
-            data["message"] = "OK"
-            data["items"] = {
-                "evtAuthToken": response_body["evtAuthToken"],
-                "evtEndTime": response_body["evtEndTime"]
-            }
+            if response_body["code"] != "000":
+                data["retCode"] = response_body["code"]
+                data["message"] = ""
+                data["items"] = ""
+
+            else:
+                data["retCode"] = response_body["code"]
+                data["message"] = "OK"
+                data["items"] = {
+                    "missiontoken": self.userinfo["missionToken"],
+                }
+
+                UpdateMember(evtToken=self.evtToken,
+                             missionToken=str(response_body["item"]["missiontoken"]))
 
         self.write_message_by_data(data)
-        self.finish()
 
 
 class VersionHandler(BaseHandler):
@@ -305,5 +467,4 @@ class VersionHandler(BaseHandler):
     def prepare(self):
         log.debug("get version")
         self.write("version %s" % "v9.9")
-
         self.finish()
