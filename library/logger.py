@@ -44,7 +44,7 @@ def initialize():
             'file': {
                 'class': 'logging.handlers.RotatingFileHandler',
                 'formatter': 'detail',
-                'filename': '/tmp/gameserver.log',
+                'filename': '/tmp/gfun-gameserver.log',
                 'maxBytes': 1024 * 1024 * 1,
                 'backupCount': 5,
                 'encoding': 'utf-8',
