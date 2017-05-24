@@ -72,7 +72,7 @@ def join_gf365(gameAccessId=str):
 
     response = http_client.fetch(http_request)
 
-    logger.debug("response join_gf365: %s" % response)
+    logger.debug("response join_gf365: %s" % response.body)
     # logger.debug("body: %s" % response.body)
 
     return

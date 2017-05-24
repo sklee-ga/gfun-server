@@ -15,6 +15,7 @@ def dict_factory(cursor, row):
         d[col[0]] = row[idx]
     return d
 
+
 def initialize():
 
     conn.row_factory = dict_factory
@@ -22,7 +23,7 @@ def initialize():
 
     # drop and Create table
     c.execute("Drop TABLE if EXISTS users")
-    c.execute("CREATE TABLE users (evtToken text, evtAuthToken text, missionToken text, gUserKey text, gSumScore real)")
+    c.execute("CREATE TABLE users (envName text, gameRegId text, gameAccessId text, gUserKey text, gSumScore real)")
 
     # Insert a row of data
     # c.execute("INSERT INTO stocks VALUES ('2006-01-05','BUY','RHAT',100,35.14)")

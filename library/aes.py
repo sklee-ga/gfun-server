@@ -20,7 +20,7 @@ import base64
 
 class AESCrypt(object):
     def __init__(self):
-        self.key = 'SuYATaWUzaga22n6be2RuprUVubrePha'
+        self.key = 'TuYAWaWUzaga35n6be7RuprUVubreDhb'
         self.iv = self.key[:16]
         self.BLOCK_SIZE = 128
         self.PADDING = '{'

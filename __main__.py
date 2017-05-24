@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # Meta
-__version__ = '1.0'
-__version_info__ = (1, 0)
-__author__ = 'Sangkyung Lee <sangkyung.lee@gconhub.co.kr>'
+__version__ = '2.0'
+__version_info__ = (2, 0)
+__author__ = 'Sangkyung Lee <sangkyung.lee@gamearena.co.kr>'
 
 """
     GF365 integration game server
@@ -15,7 +15,7 @@ import time
 import tornado.httpserver
 import tornado.ioloop
 import tornado.web
-from handler import GFLoginHandler, ScoreHandler, VersionHandler, MissionInfoHandler, MissionEndHandler
+from handler import GFLoginHandler, GFJoinHandler, ScoreHandler, VersionHandler
 from tornado.options import options, define, parse_command_line
 
 import library.sqlitedb
@@ -33,12 +33,10 @@ def main():
 
     # create tornado request handler
     application = tornado.web.Application([
-        (r"/capi/login/v1/([0-9]+)", GFLoginHandler),
-        (r"/gapi/score/v2/(.*)", ScoreHandler),
-        (r"/gapi/payment/v2/(.*)", ScoreHandler),
-        (r"/gapi/mission_info/v1/(.*)", MissionInfoHandler),
-        (r"/capi/mission_end/v1", MissionEndHandler),
         (r"/version", VersionHandler),
+        (r"/(.*)/login/v2/(.*)", GFLoginHandler),
+        (r"/(.*)/join/v2/(.*)", GFJoinHandler),
+        (r"/(.*)/score/v2/(.*)", ScoreHandler),
         (r'/(favicon.ico)', tornado.web.StaticFileHandler, {"path": ""}),
     ])
 
