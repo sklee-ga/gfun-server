@@ -6,7 +6,7 @@ __version_info__ = (2, 0)
 __author__ = 'Sangkyung Lee <sangkyung.lee@gamearena.co.kr>'
 
 """
-    GF365 integration game server
+    Game server with GF365
 """
 
 import signal
@@ -21,7 +21,6 @@ from tornado.options import options, define, parse_command_line
 import library.sqlitedb
 
 define('port', default=8890, help='default port number', type=int)
-define('conf', default='./config/local.conf', help='config file', type=str)
 MAX_WAIT_SECONDS_BEFORE_SHUTDOWN = 3
 
 
@@ -87,6 +86,6 @@ if __name__ == "__main__":
     parse_command_line()
     main()
     # if len(sys.argv) != 3:
-    #     print('Usage 3x6game --conf=<path> --port=<port number>')
+    #     print('Usage: gfun-server --port=<port number>')
     # else:
     #     main()
